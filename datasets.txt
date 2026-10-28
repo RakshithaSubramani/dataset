@@ -1,0 +1,331 @@
+https://paste.rs/J9yFi
+
+
+import matplotlib.pyplot as plt
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.applications.resnet50 import (
+    ResNet50,
+    decode_predictions,
+    preprocess_input,
+)
+from tensorflow.keras.preprocessing import image
+
+# 1. Load Pretrained ResNet50 Model
+model = ResNet50(weights="imagenet")
+
+# 2. Load real image from path (Replace 'sample.jpg' with your exam image path)
+img_path = "/Users/sangavi/Downloads/deeplearning lab/imagenette2-160/n03417042/ILSVRC2012_val_00001144.JPEG"
+img = image.load_img(img_path, target_size=(224, 224))
+
+# Convert to array & preprocess for ResNet50
+img_array = image.img_to_array(img)
+img_batch = np.expand_dims(img_array, axis=0)
+preprocessed_img = preprocess_input(img_batch.copy())
+
+print("Preprocessed Tensor Shape:", preprocessed_img.shape)
+
+# 3. Predict Top-5 Classes
+preds = model.predict(preprocessed_img)
+decoded = decode_predictions(preds, top=5)[0]
+
+# 4. Display Predictions & Image
+print("\n--- Top-5 Predictions ---")
+for i, (net_id, label, score) in enumerate(decoded):
+  print(f"{i+1}: {label} {score})")
+
+plt.imshow(img)
+plt.title(f"Top Pred: {decoded[0][1]} ({decoded[0][2]*100:.1f}%)")
+plt.axis("off")
+plt.show()
+
+
+
+#2
+import tensorflow as tf
+import matplotlib.pyplot as plt
+import numpy as np
+from tensorflow.keras.applications.resnet50 import ResNet50, preprocess_input
+from tensorflow.keras.preprocessing import image
+
+# Load image from ImageNet dataset
+img_path = "/Users/sangavi/Downloads/deeplearning lab/imagenette2-160/n03417042/ILSVRC2012_val_00001144.JPEG"
+img = image.load_img(img_path, target_size=(224, 224))
+
+x = image.img_to_array(img)
+x = np.expand_dims(x, axis=0)
+x = preprocess_input(x)
+
+# Load ResNet50
+model = ResNet50(weights="imagenet")
+
+# Select 3 layers: Early, Intermediate, Deep
+layers = ["conv1_relu", "conv2_block3_out", "conv4_block6_out"]
+
+# Create feature extraction model
+outputs = [model.get_layer(layer).output for layer in layers]
+feature_model = tf.keras.Model(model.input, outputs)
+
+# Extract feature maps
+feature_maps = feature_model.predict(x, verbose=0)
+
+# Visualize feature maps
+for layer, fmap in zip(layers, feature_maps):
+    print(layer, fmap.shape)
+
+    for i in range(6):
+        plt.subplot(2, 3, i + 1)
+        plt.imshow(fmap[0, :, :, i], cmap="gray")
+        plt.axis("off")
+
+    plt.suptitle(layer)
+    plt.show()
+
+
+#3
+import numpy as np
+import tensorflow as tf
+import matplotlib.pyplot as plt
+
+from tensorflow.keras.applications import ResNet50
+from tensorflow.keras.applications.resnet50 import preprocess_input
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.layers import GlobalAveragePooling2D
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import confusion_matrix, classification_report
+from sklearn.model_selection import train_test_split
+
+# 1. Load dataset
+data = ImageDataGenerator(preprocessing_function=preprocess_input)
+
+dataset = data.flow_from_directory(
+    "imagenette2-160",
+    target_size=(224, 224),
+    batch_size=32,
+    class_mode="sparse",
+    shuffle=False
+)
+
+# 2. Load pretrained ResNet50
+base = ResNet50(
+    weights="imagenet",
+    include_top=False,
+    input_shape=(224, 224, 3)
+)
+base.trainable = False
+
+# 3. Extract features
+pool = GlobalAveragePooling2D()
+features = pool(base.predict(dataset, verbose=1)).numpy()
+labels = dataset.classes
+
+print("Feature vector dimension:", features.shape[1])
+
+# 4. Split into training and testing data
+X_train, X_test, y_train, y_test = train_test_split(
+    features, labels, test_size=0.2, random_state=42, stratify=labels
+)
+
+# 5. Save features
+np.save("features.npy", X_train)
+np.save("labels.npy", y_train)
+np.save("test_features.npy", X_test)
+np.save("test_labels.npy", y_test)
+
+# 6. Train classifier
+model = LogisticRegression(max_iter=1000)
+model.fit(X_train, y_train)
+
+# 7. Predict
+y_pred = model.predict(X_test)
+
+# 8. Evaluate
+print("Confusion Matrix:\n", confusion_matrix(y_test, y_pred))
+print(classification_report(y_test, y_pred))
+
+
+
+# %% [markdown]
+################################################################################
+# # Question 4
+
+# %%
+
+from tensorflow.keras.applications.vgg16 import VGG16, preprocess_input
+from tensorflow.keras.layers import Embedding, LSTM, Dense
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+
+# 1. Create captions from folder labels
+captions = []
+
+for name in data.class_names:
+    captions.append("start a photo of " + name + " end")
+
+# 2. Tokenize captions
+tokenizer = Tokenizer()
+tokenizer.fit_on_texts(captions)
+
+seq = tokenizer.texts_to_sequences(captions)
+seq = pad_sequences(seq, padding="post")
+
+vocab = len(tokenizer.word_index) + 1
+
+# 3. Create CNN for image features
+cnn = VGG16(weights="imagenet", include_top=False,
+            pooling="avg")
+
+# 4. Create LSTM model
+caption_model = tf.keras.Sequential([
+    Embedding(vocab, 64),
+    LSTM(128),
+    Dense(vocab, activation="softmax")
+])
+
+caption_model.compile(
+    optimizer="adam",
+    loss="sparse_categorical_crossentropy"
+)
+
+print("Captions:", captions)
+print("Vocabulary size:", vocab)
+print("Caption sequences:", seq)
+
+
+# %% [markdown]
+# 
+################################################################################
+# # Question 5
+# 
+
+# %%
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+import tensorflow as tf
+from PIL import Image
+from tensorflow.keras.layers import Input, Dense, Reshape, Flatten, Concatenate
+from tensorflow.keras.models import Model
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+
+# 1. Load and clean images
+images, labels = [], []
+classes = sorted(os.listdir("dataset"))
+classes = [c for c in classes if os.path.isdir(os.path.join("dataset", c))]
+
+for i, name in enumerate(classes):
+    folder = os.path.join("dataset", name)
+    for file in os.listdir(folder):
+        try:
+            img = Image.open(os.path.join(folder, file)).convert("RGB")
+            img = img.resize((64, 64))
+            images.append(np.array(img))
+            labels.append(i)
+        except:
+            pass
+
+images = np.array(images, dtype="float32") / 127.5 - 1
+labels = np.array(labels)
+n = len(classes)
+
+# 2. Create text descriptions and encode them
+captions = ["a photo of " + name.replace("_", " ") for name in classes]
+tokenizer = Tokenizer()
+tokenizer.fit_on_texts(captions)
+text_seq = pad_sequences(tokenizer.texts_to_sequences(captions), maxlen=6)
+vocab = len(tokenizer.word_index) + 1
+
+encoder = tf.keras.Sequential([
+    Input(shape=(6,)),
+    tf.keras.layers.Embedding(vocab, 16),
+    tf.keras.layers.GlobalAveragePooling1D(),
+    Dense(16, activation="relu")
+])
+
+# Convert each class description to a text vector
+text_vectors = encoder.predict(text_seq, verbose=0)
+
+# 3. Create Generator
+noise = Input(shape=(100,))
+text_input = Input(shape=(16,))
+x = Concatenate()([noise, text_input])
+x = Dense(256, activation="relu")(x)
+x = Dense(64 * 64 * 3, activation="tanh")(x)
+fake = Reshape((64, 64, 3))(x)
+G = Model([noise, text_input], fake)
+
+# 4. Create Discriminator
+img_input = Input(shape=(64, 64, 3))
+disc_text = Input(shape=(16,))
+x = Flatten()(img_input)
+x = Concatenate()([x, disc_text])
+x = Dense(256, activation="relu")(x)
+out = Dense(1, activation="sigmoid")(x)
+D = Model([img_input, disc_text], out)
+D.compile(optimizer="adam", loss="binary_crossentropy")
+
+# 5. Create combined GAN
+D.trainable = False
+z = Input(shape=(100,))
+t = Input(shape=(16,))
+generated = G([z, t])
+validity = D([generated, t])
+GAN = Model([z, t], validity)
+GAN.compile(optimizer="adam", loss="binary_crossentropy")
+D.trainable = True
+
+# 6. Train Generator and Discriminator
+for epoch in range(20):
+    idx = np.random.permutation(len(images))
+
+    for start in range(0, len(images), 16):
+        batch = idx[start:start + 16]
+        real = images[batch]
+        condition = text_vectors[labels[batch]]
+
+        noise = np.random.normal(0, 1, (len(batch), 100))
+        fake_images = G.predict([noise, condition], verbose=0)
+
+        D.train_on_batch(
+            [real, condition], np.ones((len(batch), 1))
+        )
+        D.train_on_batch(
+            [fake_images, condition], np.zeros((len(batch), 1))
+        )
+
+        noise = np.random.normal(0, 1, (len(batch), 100))
+        GAN.train_on_batch(
+            [noise, condition], np.ones((len(batch), 1))
+        )
+
+    print("Epoch", epoch + 1, "completed")
+
+# 7. Generate image for a new text description
+description = input("Enter a description: ")
+sequence = pad_sequences(
+    tokenizer.texts_to_sequences([description]), maxlen=6
+)
+condition = encoder.predict(sequence, verbose=0)
+noise = np.random.normal(0, 1, (1, 100))
+generated_image = G.predict([noise, condition], verbose=0)[0]
+
+# 8. Compare generated image with a real dataset image
+class_id = 0
+real_index = np.where(labels == class_id)[0][0]
+
+plt.figure(figsize=(8, 4))
+plt.subplot(1, 2, 1)
+plt.imshow(np.clip((generated_image + 1) / 2, 0, 1))
+plt.title("Generated Image")
+plt.axis("off")
+
+plt.subplot(1, 2, 2)
+plt.imshow(np.clip((images[real_index] + 1) / 2, 0, 1))
+plt.title("Real: " + classes[class_id])
+plt.axis("off")
+plt.show()
+
+
+
+
